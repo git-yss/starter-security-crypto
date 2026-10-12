@@ -10,6 +10,8 @@ public class SecurityCryptoProperties {
     private String algorithm = "AES_GCM";
     private Replay replay = new Replay();
     private ApiSign apiSign = new ApiSign();
+    private Audit audit = new Audit();
+    private FieldEncrypt fieldEncrypt = new FieldEncrypt();
 
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
@@ -21,6 +23,8 @@ public class SecurityCryptoProperties {
     public void setAlgorithm(String algorithm) { this.algorithm = algorithm; }
     public Replay getReplay() { return replay; }
     public ApiSign getApiSign() { return apiSign; }
+    public Audit getAudit() { return audit; }
+    public FieldEncrypt getFieldEncrypt() { return fieldEncrypt; }
 
     public static class Replay {
         private boolean enabled;
@@ -38,5 +42,20 @@ public class SecurityCryptoProperties {
         public void setEnabled(boolean enabled) { this.enabled = enabled; }
         public long getWindowSeconds() { return windowSeconds; }
         public void setWindowSeconds(long windowSeconds) { this.windowSeconds = windowSeconds; }
+    }
+
+    public static class Audit {
+        private boolean enabled = true;
+        private int maxBodyLength = 4096;
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean enabled) { this.enabled = enabled; }
+        public int getMaxBodyLength() { return maxBodyLength; }
+        public void setMaxBodyLength(int maxBodyLength) { this.maxBodyLength = maxBodyLength; }
+    }
+
+    public static class FieldEncrypt {
+        private boolean enabled;
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean enabled) { this.enabled = enabled; }
     }
 }

@@ -10,8 +10,12 @@ public class Slf4jAuditPublisher implements AuditPublisher {
 
     @Override
     public void publish(AuditEvent event) {
-        log.info("auditId={},eventType={},success={},traceId={},requestUri={},failureCode={},timestamp={}",
-                event.getTimestamp(), event.getEventType(), event.isSuccess(), event.getTraceId(),
-                event.getRequestUri(), event.getFailureCode(), event.getTimestamp());
+        log.info("auditId={},eventType={},success={},operatorId={},clientIp={},serverHost={},"
+                        + "httpMethod={},requestUri={},queryString={},requestBody={},responseStatus={},"
+                        + "durationMs={},failureCode={},timestamp={}",
+                event.getTimestamp(), event.getEventType(), event.isSuccess(), event.getOperatorId(),
+                event.getClientIp(), event.getServerHost(), event.getHttpMethod(), event.getRequestUri(),
+                event.getQueryString(), event.getRequestBody(), event.getResponseStatus(),
+                event.getDurationMs(), event.getFailureCode(), event.getTimestamp());
     }
 }

@@ -8,6 +8,10 @@ import com.example.security.core.KeyProvider;
 import com.example.security.core.Masker;
 import com.example.security.core.ReplayStore;
 import com.example.security.core.JceCryptoProvider;
+import com.example.security.core.FieldEncryptor;
+import com.example.security.core.OperatorContextProvider;
+import com.example.security.audit.AuditFilter;
+import com.example.security.audit.DefaultOperatorContextProvider;
 import com.example.security.web.ApiCryptoAdvice;
 import com.example.security.web.ApiSignInterceptor;
 import com.example.security.web.SensitiveModule;
@@ -19,6 +23,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -56,6 +61,34 @@ public class SecurityCryptoAutoConfiguration {
     @ConditionalOnMissingBean
     public ReplayStore securityReplayStore() {
         return new InMemoryReplayStore();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public OperatorContextProvider securityOperatorContextProvider() {
+        return new DefaultOperatorContextProvider();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public FieldEncryptor securityFieldEncryptor(CryptoProvider provider) {
+        return new FieldEncryptor(provider);
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "security.crypto.audit", name = "enabled",
+            havingValue = "true", matchIfMissing = true)
+    public FilterRegistrationBean<AuditFilter> securityAuditFilter(
+            AuditPublisher publisher,
+            OperatorContextProvider operatorProvider,
+            ObjectMapper objectMapper,
+            SecurityCryptoProperties properties) {
+        FilterRegistrationBean<AuditFilter> registration = new FilterRegistrationBean<AuditFilter>();
+        registration.setFilter(new AuditFilter(publisher, operatorProvider, objectMapper,
+                properties.getAudit().getMaxBodyLength()));
+        registration.addUrlPatterns("/*");
+        registration.setOrder(Integer.MAX_VALUE - 10);
+        return registration;
     }
 
     @Bean

@@ -13,5 +13,16 @@
             <artifactId>security-crypto-autoconfigure</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.example.security</groupId>
+            <artifactId>security-crypto-mybatis</artifactId>
+            <version>${project.version}</version>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>com.example.security</groupId>
+            <artifactId>security-crypto-audit</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 </project>

@@ -15,6 +15,8 @@
     <modules>
         <module>core</module>
         <module>web</module>
+        <module>mybatis</module>
+        <module>audit</module>
         <module>autoconfigure</module>
         <module>starter</module>
         <module>demo</module>

@@ -13,6 +13,11 @@ security:
     replay:
       enabled: true
       window-seconds: 300
+    audit:
+      enabled: true
+      max-body-length: 4096
+    field-encrypt:
+      enabled: true
 
 logging:
   level:

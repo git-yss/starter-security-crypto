@@ -7,6 +7,14 @@ public class AuditEvent {
     private String requestUri;
     private String failureCode;
     private long timestamp;
+    private String operatorId;
+    private String clientIp;
+    private String serverHost;
+    private String httpMethod;
+    private String queryString;
+    private String requestBody;
+    private int responseStatus;
+    private long durationMs;
 
     public AuditEvent() {
     }
@@ -29,4 +37,20 @@ public class AuditEvent {
     public void setFailureCode(String failureCode) { this.failureCode = failureCode; }
     public long getTimestamp() { return timestamp; }
     public void setTimestamp(long timestamp) { this.timestamp = timestamp; }
+    public String getOperatorId() { return operatorId; }
+    public void setOperatorId(String operatorId) { this.operatorId = operatorId; }
+    public String getClientIp() { return clientIp; }
+    public void setClientIp(String clientIp) { this.clientIp = clientIp; }
+    public String getServerHost() { return serverHost; }
+    public void setServerHost(String serverHost) { this.serverHost = serverHost; }
+    public String getHttpMethod() { return httpMethod; }
+    public void setHttpMethod(String httpMethod) { this.httpMethod = httpMethod; }
+    public String getQueryString() { return queryString; }
+    public void setQueryString(String queryString) { this.queryString = queryString; }
+    public String getRequestBody() { return requestBody; }
+    public void setRequestBody(String requestBody) { this.requestBody = requestBody; }
+    public int getResponseStatus() { return responseStatus; }
+    public void setResponseStatus(int responseStatus) { this.responseStatus = responseStatus; }
+    public long getDurationMs() { return durationMs; }
+    public void setDurationMs(long durationMs) { this.durationMs = durationMs; }
 }
