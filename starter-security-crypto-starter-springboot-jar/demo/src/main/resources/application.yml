@@ -1,0 +1,19 @@
+server:
+  port: 8080
+
+security:
+  crypto:
+    enabled: true
+    environment: dev
+    key-version: V1
+    algorithm: AES_GCM
+    api-sign:
+      enabled: false
+      window-seconds: 300
+    replay:
+      enabled: true
+      window-seconds: 300
+
+logging:
+  level:
+    SECURITY_AUDIT: INFO
