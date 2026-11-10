@@ -30,11 +30,14 @@ public class ApiCryptoAdvice implements RequestBodyAdvice, ResponseBodyAdvice<Ob
     private final ObjectMapper objectMapper;
     private final CryptoProvider cryptoProvider;
     private final String keyVersion;
+    private final int maxBodySize;
 
-    public ApiCryptoAdvice(ObjectMapper objectMapper, CryptoProvider cryptoProvider, String keyVersion) {
+    public ApiCryptoAdvice(ObjectMapper objectMapper, CryptoProvider cryptoProvider,
+                           String keyVersion, int maxBodySize) {
         this.objectMapper = objectMapper;
         this.cryptoProvider = cryptoProvider;
         this.keyVersion = keyVersion;
+        this.maxBodySize = maxBodySize;
     }
 
     @Override
@@ -141,6 +144,9 @@ public class ApiCryptoAdvice implements RequestBodyAdvice, ResponseBodyAdvice<Ob
         byte[] buffer = new byte[4096];
         int count;
         while ((count = stream.read(buffer)) != -1) {
+            if (output.size() + count > maxBodySize) {
+                throw new SecurityException("SEC-4010", "Request body is too large");
+            }
             output.write(buffer, 0, count);
         }
         return output.toByteArray();

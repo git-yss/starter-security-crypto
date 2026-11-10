@@ -1,20 +1,18 @@
 # security-crypto-starter
 
-基于 JDK 8、Spring Boot 2.7 的应用层安全 Starter Demo。
+面向 JDK 8、Spring Boot 2.7 的应用层安全 Starter，提供字段加密、接口加解密、请求签名、防重放、JSON 脱敏和 HTTP 审计能力。
 
-## 当前实现
+## 模块与能力
 
-- `@Sensitive`：Jackson 返回 JSON 字段脱敏。
-- `@ApiCrypto`：JSON 请求体解密、响应体加密。
-- `@ApiSign`：请求签名验签和时间窗口校验。
-- `@EncryptField`：字段加密元数据，MyBatis 插件支持常见 POJO 参数和结果对象。
-- HTTP 操作审计：记录操作员、客户端 IP、服务主机、方法、URI、查询参数、脱敏入参、状态码和耗时。
-- `CryptoProvider`、`KeyProvider`、`Masker`、`AuditPublisher`、`ReplayStore`：均可由业务 Spring Bean 替换。
-- 自动装配：引入 `security-crypto-starter` 后自动注册。
+- `core`：AES-GCM、HMAC-SHA256、密钥抽象、防重放和通用注解。
+- `web`：`@ApiCrypto` 请求解密/响应加密、`@ApiSign` 验签、`@Sensitive` JSON 脱敏。
+- `mybatis`：`@EncryptField` 入库前加密、查询后解密，并在 SQL 执行后恢复原参数。
+- `audit`：记录操作人、客户端 IP、URI、脱敏后的查询参数和请求体、响应状态及耗时。
+- `autoconfigure` / `starter`：自动装配和生产启动检查。
 
-默认密钥只用于 Demo，生产环境必须替换为 KMS、密码机或外部安全配置。
+所有高风险能力默认按需开启。Starter 只处理加密、验签、脱敏与审计，不代替 HTTPS、身份认证、RBAC、数据权限和业务授权。
 
-## 构建和启动
+## 构建
 
 需要 JDK 8 和 Maven 3.8+：
 
@@ -23,95 +21,96 @@ mvn clean package
 java -jar demo/target/security-crypto-demo-1.0.0-SNAPSHOT.jar
 ```
 
-## 患者隐私场景
+## 开发环境配置
 
-患者手机号、地址、身份证和特殊感染诊断可以标记为加密字段：
-
-```java
-public class PatientEntity {
-    @EncryptField
-    private String phone;
-    @EncryptField
-    private String address;
-    @EncryptField
-    private String idCard;
-    @EncryptField
-    private String infectionDiagnosis;
-}
-```
-
-配置：
+本地密钥值必须是 Base64 编码。下面的密钥仅用于开发测试，禁止用于生产：
 
 ```yaml
 security:
   crypto:
-    field-encrypt:
+    enabled: true
+    environment: dev
+    fail-fast: true
+    key-version: V1
+    max-body-size: 1048576
+    key:
+      local:
+        V1: MTIzNDU2Nzg5MDEyMzQ1Ng==
+    api-crypto:
       enabled: true
+    api-sign:
+      enabled: true
+      window-seconds: 300
+    replay:
+      enabled: true
+      store: memory
     audit:
       enabled: true
-      max-body-length: 4096
+      allow-operator-header: false
+      trust-forwarded-headers: false
+      fail-on-publish-error: false
+    field-encrypt:
+      enabled: true
 ```
 
-展示时建议使用不同 DTO：
+## 生产环境接入
 
-- `PatientMaskedResponse`：普通查询使用，手机号、地址、身份证和诊断信息自动脱敏。
-- `PatientPlainResponse`：只用于经过权限控制的医疗业务接口。
+生产配置示例见 [`docs/application-production.yml`](docs/application-production.yml)。生产启动检查会拒绝以下配置：
 
-Demo 接口：
+- 使用默认本地 `KeyProvider`，除非显式设置 `key.allow-local-in-production=true`（不推荐）。
+- 验签与防重放开启时使用内存防重放存储。
+- 信任客户端传入的 `X-Operator-Id`。
+- 缺少当前 `key-version` 对应密钥，或请求体、签名时间窗配置非法。
 
-```text
-GET /demo/patients/1/masked
-GET /demo/patients/1/plain
-```
-
-数据库透明加密的 MyBatis 插件已经提供。使用 MyBatis 的业务项目需要额外引入 `security-crypto-mybatis` 和 MyBatis 依赖，自动配置会在检测到 MyBatis 后注册插件。复杂动态 SQL、Map 参数、联表 DTO 和批量参数需要单独验证。
-
-本 Starter 只负责加密和脱敏，不负责判断当前医生是否有权查看明文。明文接口必须由业务项目的认证、RBAC、数据权限或破窗审批逻辑保护。
-
-## HTTP 操作审计
-
-默认开启审计过滤器，日志使用 `SECURITY_AUDIT` logger，主要字段包括：
-
-```text
-operatorId
-clientIp
-serverHost
-httpMethod
-requestUri
-queryString
-requestBody
-responseStatus
-durationMs
-```
-
-业务项目可以实现 `OperatorContextProvider`：
+业务系统应提供 KMS、Vault 或 HSM 支持的 `KeyProvider`，不要把生产密钥写进 YAML、代码、镜像、日志或审计事件：
 
 ```java
-@Component
-public class LoginOperatorProvider implements OperatorContextProvider {
-    @Override
-    public String getOperatorId() {
-        return LoginContext.currentUserId();
-    }
+@Bean
+public KeyProvider kmsKeyProvider(KmsClient kmsClient) {
+    return version -> kmsClient.getSymmetricKey(version);
 }
 ```
 
-如果业务没有提供操作员上下文，组件不会伪造账号，只会尝试读取 `X-Operator-Id` 请求头用于 Demo。生产环境必须从可信登录上下文获取，不能信任客户端自行传入的账号头。
+生产防重放使用 Redis 原子 `SET NX` 与 TTL。应用需要提供可用的 `StringRedisTemplate`，并配置：
 
-审计入参会对密码、Token、Authorization、身份证、手机号、地址、诊断和感染相关字段进行脱敏。非 JSON Body 只记录 `[non-json-body]`。
-
-## ApiCrypto
-
-客户端先使用约定的 AES-GCM 密钥加密原始 JSON：
-
-```json
-{
-  "username": "demo",
-  "password": "secret"
-}
+```yaml
+security.crypto.replay.store: redis
 ```
 
-再发送：
+Redis 应配置高可用、访问认证、TLS（环境支持时）、容量告警和 key 淘汰监控。
+
+## 请求签名协议
+
+客户端发送以下请求头：
+
+```text
+X-Security-Timestamp: Unix 毫秒时间戳
+X-Security-Nonce: 16-128 字符随机串
+X-Security-Client-Id: 客户端标识
+X-Security-Key-Version: 密钥版本（可省略，省略时使用服务端当前版本）
+X-Security-Signature: Base64(HMAC-SHA256(canonical))
+```
+
+`canonical` 按下列顺序拼接，每项之间只有一个换行符：
+
+```text
+HTTP_METHOD
+REQUEST_URI
+RAW_QUERY_STRING
+BASE64(SHA-256(raw request body))
+TIMESTAMP
+NONCE
+CLIENT_ID
+KEY_VERSION
+```
+
+是否包含 method、path、query、body 由 `@ApiSign` 属性决定；不包含时对应行保留为空行。查询字符串使用原始顺序和原始编码，客户端与服务端必须完全一致。
+
+注意：当前签名协议包含请求体摘要、客户端 ID 和密钥版本。若从旧版本升级，所有调用方必须同步更新签名实现，否则请求会被拒绝。
+
+## 接口加密与字段加密
+
+`@ApiCrypto` 的请求格式：
 
 ```json
 {
@@ -119,21 +118,26 @@ public class LoginOperatorProvider implements OperatorContextProvider {
 }
 ```
 
-接口：
+密文自带密钥版本，解密时会按该版本选取密钥，便于滚动轮换。AES-GCM 不能替代 HTTPS；浏览器和客户端运行时仍可能接触明文。
 
-```text
-POST /demo/secure/login
+MyBatis 实体字段可以使用：
+
+```java
+public class PatientEntity {
+    @EncryptField
+    private String phone;
+}
 ```
 
-浏览器 Network 面板中看到的是密文，但浏览器运行时仍然可以通过调试查看加密前和解密后的数据。该能力不能替代 HTTPS。
+复杂动态 SQL、Map/集合嵌套参数、批量写入、联表 DTO 和自定义 TypeHandler 仍需在业务项目中增加集成测试。
 
-## 生产限制
+## 审计安全
 
-- 不要使用默认测试密钥。
-- 不要把密钥写入代码、日志或审计事件。
-- 防重放应替换为 Redis 原子 `SET NX EX` 实现。
-- 当前默认 JCE 实现使用 AES-GCM 和 HMAC-SHA256，生产国密场景应替换为 SM2/SM3/SM4 Provider。
-- 明文展示接口必须由业务权限控制。
-- 解密失败、验签失败和重放请求必须拒绝。
+- 默认不信任 `X-Operator-Id`，生产应实现 `OperatorContextProvider` 从认证上下文获取操作人。
+- 默认不信任 `X-Forwarded-For`。只有应用部署在会清洗并重写该请求头的可信代理之后，才可开启 `trust-forwarded-headers`。
+- 密码、token、authorization、证件号、手机号、地址、诊断等查询参数和 JSON 字段会被脱敏。
+- `fail-on-publish-error=false` 时，审计发布失败记录错误日志但不影响业务；强合规系统可改为 `true`，并配套高可用审计存储。
 
-完整设计说明见 `outputs/security-crypto-starter-SPEC.md`。
+## 上线前检查
+
+上线仍需完成外部 KMS/Vault/HSM、Redis 高可用、密钥轮换与吊销、指标与告警、日志留存、依赖漏洞扫描、渗透测试、容量压测和灾备演练。本项目提供的是生产集成基线，不等同于经过认证的完整安全产品。

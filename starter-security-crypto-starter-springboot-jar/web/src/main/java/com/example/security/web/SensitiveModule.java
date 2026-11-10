@@ -9,6 +9,7 @@ import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.BeanDescription;
 import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.SerializationConfig;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.ser.BeanPropertyWriter;
 import com.fasterxml.jackson.databind.ser.BeanSerializerModifier;
@@ -20,7 +21,7 @@ public class SensitiveModule extends SimpleModule {
     public SensitiveModule(final Masker masker) {
         setSerializerModifier(new BeanSerializerModifier() {
             @Override
-            public List<BeanPropertyWriter> changeProperties(SerializerProvider provider,
+            public List<BeanPropertyWriter> changeProperties(SerializationConfig config,
                                                               BeanDescription beanDescription,
                                                               List<BeanPropertyWriter> writers) {
                 Sensitive classAnnotation = beanDescription.getClassAnnotations().get(Sensitive.class);

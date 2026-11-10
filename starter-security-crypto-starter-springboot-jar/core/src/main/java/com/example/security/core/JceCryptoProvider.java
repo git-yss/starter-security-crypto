@@ -27,7 +27,7 @@ public class JceCryptoProvider implements CryptoProvider {
             byte[] iv = new byte[12];
             secureRandom.nextBytes(iv);
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-            cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(key(), "AES"),
+            cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(key(context.getKeyVersion()), "AES"),
                     new GCMParameterSpec(128, iv));
             byte[] encrypted = cipher.doFinal(plaintext);
             return PREFIX + context.getKeyVersion() + "$"
@@ -49,10 +49,17 @@ public class JceCryptoProvider implements CryptoProvider {
             if (parts.length != 5) {
                 throw new SecurityException("SEC-4001", "Invalid ciphertext format");
             }
+            String keyVersion = parts[2];
+            if (keyVersion.length() == 0) {
+                throw new SecurityException("SEC-4001", "Ciphertext key version is missing");
+            }
             byte[] iv = Base64.getDecoder().decode(parts[3]);
+            if (iv.length != 12) {
+                throw new SecurityException("SEC-4001", "Invalid GCM IV length");
+            }
             byte[] encrypted = Base64.getDecoder().decode(parts[4]);
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-            cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(key(), "AES"),
+            cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(key(keyVersion), "AES"),
                     new GCMParameterSpec(128, iv));
             return cipher.doFinal(encrypted);
         } catch (SecurityException ex) {
@@ -64,9 +71,11 @@ public class JceCryptoProvider implements CryptoProvider {
 
     @Override
     public byte[] digest(String algorithm, byte[] data) {
+        if (!"SHA-256".equalsIgnoreCase(algorithm) && !"SHA256".equalsIgnoreCase(algorithm)) {
+            throw new SecurityException("SEC-4009", "Unsupported digest algorithm");
+        }
         try {
-            String name = "SM3".equalsIgnoreCase(algorithm) ? "SHA-256" : algorithm;
-            return MessageDigest.getInstance(name).digest(data);
+            return MessageDigest.getInstance("SHA-256").digest(data);
         } catch (Exception ex) {
             throw new SecurityException("SEC-4009", "Unsupported digest algorithm", ex);
         }
@@ -74,9 +83,10 @@ public class JceCryptoProvider implements CryptoProvider {
 
     @Override
     public String sign(String algorithm, byte[] data, String keyVersion) {
+        requireHmacSha256(algorithm);
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(key(), "HmacSHA256"));
+            mac.init(new SecretKeySpec(key(keyVersion), "HmacSHA256"));
             return Base64.getEncoder().encodeToString(mac.doFinal(data));
         } catch (Exception ex) {
             throw new SecurityException("SEC-5001", "Signing failed", ex);
@@ -85,6 +95,10 @@ public class JceCryptoProvider implements CryptoProvider {
 
     @Override
     public boolean verify(String algorithm, byte[] data, String signature, String keyVersion) {
+        requireHmacSha256(algorithm);
+        if (signature == null) {
+            return false;
+        }
         byte[] expected = Base64.getDecoder().decode(sign(algorithm, data, keyVersion));
         byte[] actual;
         try {
@@ -95,11 +109,20 @@ public class JceCryptoProvider implements CryptoProvider {
         return MessageDigest.isEqual(expected, actual);
     }
 
-    private byte[] key() {
-        byte[] key = keyProvider.getSymmetricKey("V1");
+    private byte[] key(String keyVersion) {
+        if (keyVersion == null || keyVersion.length() == 0) {
+            throw new SecurityException("SEC-4008", "Key version is required");
+        }
+        byte[] key = keyProvider.getSymmetricKey(keyVersion);
         if (key == null || (key.length != 16 && key.length != 24 && key.length != 32)) {
             throw new SecurityException("SEC-4008", "Invalid symmetric key");
         }
         return key;
+    }
+
+    private void requireHmacSha256(String algorithm) {
+        if (!"HMAC_SHA256".equalsIgnoreCase(algorithm)) {
+            throw new SecurityException("SEC-5002", "Unsupported signature algorithm");
+        }
     }
 }

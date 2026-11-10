@@ -5,17 +5,27 @@ security:
   crypto:
     enabled: true
     environment: dev
+    fail-fast: true
     key-version: V1
-    algorithm: AES_GCM
+    max-body-size: 1048576
+    key:
+      local:
+        V1: MTIzNDU2Nzg5MDEyMzQ1Ng==
+    api-crypto:
+      enabled: true
     api-sign:
       enabled: false
       window-seconds: 300
     replay:
       enabled: true
       window-seconds: 300
+      store: memory
     audit:
       enabled: true
       max-body-length: 4096
+      allow-operator-header: false
+      trust-forwarded-headers: false
+      fail-on-publish-error: false
     field-encrypt:
       enabled: true
 

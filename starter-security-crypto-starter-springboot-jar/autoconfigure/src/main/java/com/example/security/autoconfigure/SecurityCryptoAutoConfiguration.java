@@ -14,9 +14,10 @@ import com.example.security.audit.AuditFilter;
 import com.example.security.audit.DefaultOperatorContextProvider;
 import com.example.security.web.ApiCryptoAdvice;
 import com.example.security.web.ApiSignInterceptor;
+import com.example.security.web.SecurityExceptionHandler;
+import com.example.security.web.SecurityRequestCachingFilter;
 import com.example.security.web.SensitiveModule;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -24,6 +25,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.core.Ordered;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -35,8 +37,8 @@ public class SecurityCryptoAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public KeyProvider securityKeyProvider() {
-        return new DefaultKeyProvider();
+    public KeyProvider securityKeyProvider(SecurityCryptoProperties properties) {
+        return new DefaultKeyProvider(properties.getKey().getLocal());
     }
 
     @Bean
@@ -59,6 +61,8 @@ public class SecurityCryptoAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    @ConditionalOnProperty(prefix = "security.crypto.replay", name = "store",
+            havingValue = "memory", matchIfMissing = true)
     public ReplayStore securityReplayStore() {
         return new InMemoryReplayStore();
     }
@@ -85,9 +89,24 @@ public class SecurityCryptoAutoConfiguration {
             SecurityCryptoProperties properties) {
         FilterRegistrationBean<AuditFilter> registration = new FilterRegistrationBean<AuditFilter>();
         registration.setFilter(new AuditFilter(publisher, operatorProvider, objectMapper,
-                properties.getAudit().getMaxBodyLength()));
+                properties.getAudit().getMaxBodyLength(),
+                properties.getAudit().isAllowOperatorHeader(),
+                properties.getAudit().isTrustForwardedHeaders(),
+                properties.getAudit().isFailOnPublishError()));
         registration.addUrlPatterns("/*");
-        registration.setOrder(Integer.MAX_VALUE - 10);
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 20);
+        return registration;
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "security.crypto.api-sign", name = "enabled", havingValue = "true")
+    public FilterRegistrationBean<SecurityRequestCachingFilter> securityRequestCachingFilter(
+            SecurityCryptoProperties properties) {
+        FilterRegistrationBean<SecurityRequestCachingFilter> registration =
+                new FilterRegistrationBean<SecurityRequestCachingFilter>();
+        registration.setFilter(new SecurityRequestCachingFilter(properties.getMaxBodySize()));
+        registration.addUrlPatterns("/*");
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 10);
         return registration;
     }
 
@@ -99,10 +118,24 @@ public class SecurityCryptoAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnProperty(prefix = "security.crypto.api-crypto", name = "enabled", havingValue = "true")
     public ApiCryptoAdvice securityApiCryptoAdvice(ObjectMapper objectMapper,
                                                   CryptoProvider provider,
                                                   SecurityCryptoProperties properties) {
-        return new ApiCryptoAdvice(objectMapper, provider, properties.getKeyVersion());
+        return new ApiCryptoAdvice(objectMapper, provider, properties.getKeyVersion(),
+                properties.getMaxBodySize());
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public SecurityExceptionHandler securityExceptionHandler() {
+        return new SecurityExceptionHandler();
+    }
+
+    @Bean
+    public ProductionReadinessValidator securityProductionReadinessValidator(
+            SecurityCryptoProperties properties, KeyProvider keyProvider) {
+        return new ProductionReadinessValidator(properties, keyProvider);
     }
 
     @Bean
@@ -112,7 +145,10 @@ public class SecurityCryptoAutoConfiguration {
                                                         AuditPublisher auditPublisher,
                                                         SecurityCryptoProperties properties) {
         return new ApiSignInterceptor(provider, replayStore, auditPublisher,
-                properties.getApiSign().getWindowSeconds(), properties.getKeyVersion());
+                properties.getApiSign().getWindowSeconds(), properties.getKeyVersion(),
+                properties.getReplay().getWindowSeconds(),
+                properties.getReplay().isEnabled(),
+                properties.getAudit().isFailOnPublishError());
     }
 
     @Bean

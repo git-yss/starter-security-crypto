@@ -13,6 +13,8 @@ import org.apache.ibatis.plugin.Signature;
 import java.lang.reflect.Field;
 import java.sql.Statement;
 import java.util.Collection;
+import java.util.IdentityHashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
@@ -33,15 +35,16 @@ public class EncryptFieldInterceptor implements Interceptor {
     public Object intercept(Invocation invocation) throws Throwable {
         if (invocation.getTarget() instanceof ParameterHandler) {
             Object parameter = readParameter(invocation.getTarget());
-            transform(parameter, true);
+            List<FieldChange> changes = new ArrayList<FieldChange>();
+            encryptForWrite(parameter, new IdentityHashMap<Object, Boolean>(), changes);
             try {
                 return invocation.proceed();
             } finally {
-                transform(parameter, false);
+                restore(changes);
             }
         }
         Object result = invocation.proceed();
-        transform(result, false);
+        decryptResults(result, new IdentityHashMap<Object, Boolean>());
         return result;
     }
 
@@ -68,32 +71,57 @@ public class EncryptFieldInterceptor implements Interceptor {
         return null;
     }
 
-    private void transform(Object value, boolean encrypt) {
-        if (value == null) {
+    private void encryptForWrite(Object value, IdentityHashMap<Object, Boolean> visited,
+                                 List<FieldChange> changes) {
+        if (!mark(value, visited)) {
             return;
         }
         if (value instanceof Collection) {
             for (Object item : (Collection<?>) value) {
-                transform(item, encrypt);
-            }
-            return;
-        }
-        if (value instanceof List) {
-            for (Object item : (List<?>) value) {
-                transform(item, encrypt);
+                encryptForWrite(item, visited, changes);
             }
             return;
         }
         if (value instanceof java.util.Map) {
             for (Object item : ((java.util.Map<?, ?>) value).values()) {
-                transform(item, encrypt);
+                encryptForWrite(item, visited, changes);
             }
             return;
         }
-        if (value instanceof String || value instanceof Number
-                || value instanceof Boolean) {
+        processFields(value, true, changes);
+    }
+
+    private void decryptResults(Object value, IdentityHashMap<Object, Boolean> visited) {
+        if (!mark(value, visited)) {
             return;
         }
+        if (value instanceof Collection) {
+            for (Object item : (Collection<?>) value) {
+                decryptResults(item, visited);
+            }
+            return;
+        }
+        if (value instanceof java.util.Map) {
+            for (Object item : ((java.util.Map<?, ?>) value).values()) {
+                decryptResults(item, visited);
+            }
+            return;
+        }
+        processFields(value, false, null);
+    }
+
+    private boolean mark(Object value, IdentityHashMap<Object, Boolean> visited) {
+        if (value == null) {
+            return false;
+        }
+        if (value instanceof String || value instanceof Number
+                || value instanceof Boolean || value.getClass().isEnum()) {
+            return false;
+        }
+        return visited.put(value, Boolean.TRUE) == null;
+    }
+
+    private void processFields(Object value, boolean encrypt, List<FieldChange> changes) {
         for (Field field : allFields(value.getClass())) {
             EncryptField annotation = field.getAnnotation(EncryptField.class);
             if (annotation == null || field.getType() != String.class) {
@@ -102,13 +130,30 @@ public class EncryptFieldInterceptor implements Interceptor {
             try {
                 field.setAccessible(true);
                 String current = (String) field.get(value);
-                field.set(value, encrypt
-                        ? fieldEncryptor.encrypt(current, annotation)
-                        : fieldEncryptor.decrypt(current, annotation));
+                if (encrypt) {
+                    String encrypted = fieldEncryptor.encrypt(current, annotation);
+                    if (current != encrypted && (current == null || !current.equals(encrypted))) {
+                        changes.add(new FieldChange(value, field, current));
+                        field.set(value, encrypted);
+                    }
+                } else if (current != null) {
+                    field.set(value, fieldEncryptor.decrypt(current, annotation));
+                }
             } catch (RuntimeException ex) {
                 throw ex;
             } catch (Exception ex) {
                 throw new IllegalStateException("Failed to process encrypted field", ex);
+            }
+        }
+    }
+
+    private void restore(List<FieldChange> changes) {
+        for (int i = changes.size() - 1; i >= 0; i--) {
+            FieldChange change = changes.get(i);
+            try {
+                change.field.set(change.target, change.originalValue);
+            } catch (IllegalAccessException ex) {
+                throw new IllegalStateException("Failed to restore encrypted field", ex);
             }
         }
     }
@@ -121,5 +166,17 @@ public class EncryptFieldInterceptor implements Interceptor {
             current = current.getSuperclass();
         }
         return fields.toArray(new Field[fields.size()]);
+    }
+
+    private static final class FieldChange {
+        private final Object target;
+        private final Field field;
+        private final String originalValue;
+
+        private FieldChange(Object target, Field field, String originalValue) {
+            this.target = target;
+            this.field = field;
+            this.originalValue = originalValue;
+        }
     }
 }
