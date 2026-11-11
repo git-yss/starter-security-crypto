@@ -3,6 +3,12 @@ package com.example.security.autoconfigure;
 import com.example.security.core.KeyProvider;
 import org.springframework.beans.factory.InitializingBean;
 
+/**
+ * 生产就绪校验器。
+ *
+ * <p>当已启用的安全功能缺少必要配置，或者生产环境错误使用了仅适合开发环境的组件时，
+ * 阻止应用启动，避免应用携带不安全配置进入运行状态。</p>
+ */
 public class ProductionReadinessValidator implements InitializingBean {
     private final SecurityCryptoProperties properties;
     private final KeyProvider keyProvider;

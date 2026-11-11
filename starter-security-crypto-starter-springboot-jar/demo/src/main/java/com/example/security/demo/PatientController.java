@@ -14,8 +14,8 @@ public class PatientController {
     }
 
     /**
-     * This endpoint is only a demonstration. A real application must protect it
-     * with its own authorization and break-glass audit policy.
+     * 本接口只用于演示返回明文数据。真实业务必须通过身份认证、数据权限以及必要的
+     * 紧急授权审计机制保护此类接口。
      */
     @GetMapping("/{id}/plain")
     public PatientPlainResponse plain(@PathVariable("id") Long id) {

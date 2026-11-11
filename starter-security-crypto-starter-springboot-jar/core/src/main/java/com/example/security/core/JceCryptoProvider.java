@@ -9,6 +9,13 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
 
+/**
+ * 基于 JDK JCE API 的默认密码学实现。
+ *
+ * <p>密文格式为 {@code SC1$AES_GCM$keyVersion$iv$data}，其中携带了加密时使用的
+ * 密钥版本。这样即使当前活动密钥已经轮换，系统仍然可以根据密文中的版本找到旧密钥，
+ * 从而解密历史数据。</p>
+ */
 public class JceCryptoProvider implements CryptoProvider {
     private static final String PREFIX = "SC1$AES_GCM$";
     private final KeyProvider keyProvider;
@@ -49,6 +56,7 @@ public class JceCryptoProvider implements CryptoProvider {
             if (parts.length != 5) {
                 throw new SecurityException("SEC-4001", "Invalid ciphertext format");
             }
+            // 解密必须使用密文中记录的历史版本，不能直接使用当前活动密钥版本。
             String keyVersion = parts[2];
             if (keyVersion.length() == 0) {
                 throw new SecurityException("SEC-4001", "Ciphertext key version is missing");

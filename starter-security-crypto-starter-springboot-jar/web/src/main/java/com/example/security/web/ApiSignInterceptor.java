@@ -16,6 +16,13 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Base64;
 
+/**
+ * 在 Controller 方法执行前校验标记了 {@link ApiSign} 的请求。
+ *
+ * <p>拦截器依次校验时间戳、构造规范签名原文、验证 HMAC，最后通过
+ * {@link ReplayStore} 消费 nonce 以阻止重复请求。参与签名的原始请求体由
+ * {@link SecurityRequestCachingFilter} 提前缓存。</p>
+ */
 public class ApiSignInterceptor implements HandlerInterceptor {
     public static final String TIMESTAMP = "X-Security-Timestamp";
     public static final String NONCE = "X-Security-Nonce";
@@ -89,12 +96,14 @@ public class ApiSignInterceptor implements HandlerInterceptor {
             if (timestamp < now - windowMillis || timestamp > now + windowMillis) {
                 throw new IllegalArgumentException("request expired");
             }
+            // 客户端与服务端必须使用完全相同的字段顺序和换行规则构造签名原文。
             String canonical = canonical(request, annotation, timestampValue, nonce, clientId,
                     requestKeyVersion);
             if (!cryptoProvider.verify("HMAC_SHA256",
                     canonical.getBytes(StandardCharsets.UTF_8), signature, requestKeyVersion)) {
                 throw new IllegalArgumentException("invalid signature");
             }
+            // 先验签再登记 nonce，避免攻击者用无效签名污染防重放存储。
             if (replayEnabled && annotation.replayCheck()
                     && !replayStore.useOnce(clientId + ":" + nonce, replayWindowSeconds)) {
                 throw new IllegalArgumentException("replay request");
@@ -114,7 +123,7 @@ public class ApiSignInterceptor implements HandlerInterceptor {
             try {
                 response.getWriter().write("{\"success\":false,\"code\":\"SEC-4004\",\"message\":\"security validation failed\"}");
             } catch (java.io.IOException ignored) {
-                // The response is already being rejected.
+                // 当前请求已经进入拒绝流程，写响应失败时不再覆盖原始安全校验结果。
             }
             return false;
         }
@@ -172,6 +181,7 @@ public class ApiSignInterceptor implements HandlerInterceptor {
 
     private static byte[] cachedBody(HttpServletRequest request) {
         ServletRequest current = request;
+        // 请求可能被多个过滤器重复包装，因此需要沿包装器链向内查找缓存的原始请求体。
         while (current != null) {
             if (current instanceof CachedBodyHttpServletRequest) {
                 return ((CachedBodyHttpServletRequest) current).getCachedBody();

@@ -2,6 +2,8 @@
 
 面向 JDK 8、Spring Boot 2.7 的应用层安全 Starter，提供字段加密、接口加解密、请求签名、防重放、JSON 脱敏和 HTTP 审计能力。
 
+第一次阅读本项目时，建议先看 [`docs/LEARNING-GUIDE.md`](docs/LEARNING-GUIDE.md)。该文档按功能、使用方式、调用链、调试断点和源码阅读顺序组织，比逐文件阅读更容易建立整体认识。
+
 ## 模块与能力
 
 - `core`：AES-GCM、HMAC-SHA256、密钥抽象、防重放和通用注解。

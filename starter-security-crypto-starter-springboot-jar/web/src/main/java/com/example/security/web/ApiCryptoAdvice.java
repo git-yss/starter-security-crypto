@@ -26,6 +26,12 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 @RestControllerAdvice
+/**
+ * 在 Spring MVC 消息转换前后处理标记了 {@link ApiCrypto} 的接口。
+ *
+ * <p>请求阶段先从加密信封中取出密文并解密成 JSON，再交给 Jackson 创建 Controller
+ * 方法参数；响应阶段先把 Controller 返回对象序列化成 JSON，再加密并包装成响应信封。</p>
+ */
 public class ApiCryptoAdvice implements RequestBodyAdvice, ResponseBodyAdvice<Object> {
     private final ObjectMapper objectMapper;
     private final CryptoProvider cryptoProvider;

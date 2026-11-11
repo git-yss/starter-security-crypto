@@ -18,6 +18,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
+/**
+ * 对 {@link EncryptField} 字段进行透明加解密的 MyBatis 插件。
+ *
+ * <p>写操作时，在 MyBatis 绑定 PreparedStatement 参数期间临时把字段替换为密文，
+ * 并在 {@code finally} 中恢复原值；读操作时，在 MyBatis 完成结果集映射后把密文字段
+ * 解密为明文。</p>
+ */
 @Intercepts({
         @Signature(type = ParameterHandler.class, method = "setParameters",
                 args = {java.sql.PreparedStatement.class}),
@@ -36,10 +43,12 @@ public class EncryptFieldInterceptor implements Interceptor {
         if (invocation.getTarget() instanceof ParameterHandler) {
             Object parameter = readParameter(invocation.getTarget());
             List<FieldChange> changes = new ArrayList<FieldChange>();
+            // 同一个对象可能被 Map 中多个键重复引用，按对象身份去重可避免重复加密。
             encryptForWrite(parameter, new IdentityHashMap<Object, Boolean>(), changes);
             try {
                 return invocation.proceed();
             } finally {
+                // SQL 执行完成后精确恢复原值，避免调用方持有的对象意外变成密文。
                 restore(changes);
             }
         }

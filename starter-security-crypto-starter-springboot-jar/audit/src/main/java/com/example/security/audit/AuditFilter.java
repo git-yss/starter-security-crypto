@@ -17,6 +17,12 @@ import java.net.InetAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 
+/**
+ * 在下游过滤器和业务接口执行完成后记录一次 HTTP 操作审计。
+ *
+ * <p>客户端可以伪造身份相关请求头，因此默认不信任这些请求头。查询参数和 JSON
+ * 请求体会先完成敏感信息脱敏，再通过 {@link AuditPublisher} 发布审计事件。</p>
+ */
 public class AuditFilter extends OncePerRequestFilter {
     private static final Log LOG = LogFactory.getLog(AuditFilter.class);
 
@@ -49,6 +55,7 @@ public class AuditFilter extends OncePerRequestFilter {
         try {
             filterChain.doFilter(wrapped, response);
         } finally {
+            // 使用 finally 可以同时记录正常响应和下游执行过程中发生异常的请求。
             AuditEvent event = new AuditEvent("HTTP_OPERATION", response.getStatus() < 400);
             String operatorId = operatorProvider.getOperatorId();
             event.setOperatorId(operatorId == null && allowOperatorHeader

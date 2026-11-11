@@ -33,6 +33,14 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @ConditionalOnClass(ObjectMapper.class)
 @ConditionalOnProperty(prefix = "security.crypto", name = "enabled", matchIfMissing = true)
 @EnableConfigurationProperties(SecurityCryptoProperties.class)
+/**
+ * Starter 的主自动配置入口。
+ *
+ * <p>Spring Boot 通过 {@code META-INF/spring.factories} 加载本类。每个 Bean 方法
+ * 都负责把 {@code core} 模块中定义的扩展接口连接到默认实现。大部分默认 Bean
+ * 使用 {@code ConditionalOnMissingBean}，因此业务项目可以通过声明同类型 Bean
+ * 替换默认实现，而不需要修改 Starter 源码。</p>
+ */
 public class SecurityCryptoAutoConfiguration {
 
     @Bean
@@ -94,6 +102,7 @@ public class SecurityCryptoAutoConfiguration {
                 properties.getAudit().isTrustForwardedHeaders(),
                 properties.getAudit().isFailOnPublishError()));
         registration.addUrlPatterns("/*");
+        // 审计过滤器在请求体缓存过滤器之后执行，确保两层请求包装器能够同时生效。
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 20);
         return registration;
     }
@@ -106,6 +115,7 @@ public class SecurityCryptoAutoConfiguration {
                 new FilterRegistrationBean<SecurityRequestCachingFilter>();
         registration.setFilter(new SecurityRequestCachingFilter(properties.getMaxBodySize()));
         registration.addUrlPatterns("/*");
+        // MVC 调用 ApiSignInterceptor 验签前，必须先缓存只能读取一次的请求体。
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 10);
         return registration;
     }

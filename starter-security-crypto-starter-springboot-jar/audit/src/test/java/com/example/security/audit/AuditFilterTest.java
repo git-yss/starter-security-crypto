@@ -72,7 +72,7 @@ class AuditFilterTest {
             public void doFilter(ServletRequest request, ServletResponse response) throws IOException {
                 byte[] buffer = new byte[128];
                 while (request.getInputStream().read(buffer) >= 0) {
-                    // Consume the body so ContentCachingRequestWrapper captures it.
+                    // 消费请求体，使 ContentCachingRequestWrapper 能够缓存读取到的内容。
                 }
             }
         };

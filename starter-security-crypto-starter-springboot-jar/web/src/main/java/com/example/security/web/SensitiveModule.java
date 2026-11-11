@@ -17,6 +17,10 @@ import com.fasterxml.jackson.databind.ser.BeanSerializerModifier;
 import java.io.IOException;
 import java.util.List;
 
+/**
+ * 将标记了 {@link Sensitive} 的字段序列化为脱敏 JSON 值的 Jackson 模块。
+ * 该过程只替换字段序列化器，不会修改原始 Java 对象中的字段值。
+ */
 public class SensitiveModule extends SimpleModule {
     public SensitiveModule(final Masker masker) {
         setSerializerModifier(new BeanSerializerModifier() {
