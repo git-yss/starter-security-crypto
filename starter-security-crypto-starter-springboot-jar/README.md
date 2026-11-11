@@ -2,7 +2,22 @@
 
 面向 JDK 8、Spring Boot 2.7 的应用层安全 Starter，提供字段加密、接口加解密、请求签名、防重放、JSON 脱敏和 HTTP 审计能力。
 
-第一次阅读本项目时，建议先看 [`docs/LEARNING-GUIDE.md`](docs/LEARNING-GUIDE.md)。该文档按功能、使用方式、调用链、调试断点和源码阅读顺序组织，比逐文件阅读更容易建立整体认识。
+## 阅读导航
+
+- 第一次学习项目：阅读 [`docs/LEARNING-GUIDE.md`](docs/LEARNING-GUIDE.md)，其中包含调用链、源码顺序和调试断点。
+- 准备接入生产：参考 [`docs/application-production.yml`](docs/application-production.yml) 和本文的“生产环境接入”。
+- 查看完整设计背景：阅读 [`outputs/security-crypto-starter-SPEC.md`](outputs/security-crypto-starter-SPEC.md)。该文档是设计目标，不代表所有规划能力均已实现，应以当前源码和测试为准。
+
+## 功能概览
+
+| 功能 | 使用入口 | 默认状态 | 核心实现 |
+| --- | --- | --- | --- |
+| JSON 字段脱敏 | `@Sensitive` | Starter 开启后可用 | Jackson `SensitiveModule` |
+| 接口请求/响应加密 | `@ApiCrypto` | 关闭 | Spring MVC 请求/响应 Advice |
+| 请求签名 | `@ApiSign` | 关闭 | MVC `HandlerInterceptor` |
+| 防重放 | `@ApiSign(replayCheck = true)` | 关闭 | 内存或 Redis `ReplayStore` |
+| MyBatis 字段加密 | `@EncryptField` | 关闭 | MyBatis `Interceptor` |
+| HTTP 操作审计 | 全局 Filter | 开启 | `AuditFilter` + `AuditPublisher` |
 
 ## 模块与能力
 
@@ -14,7 +29,7 @@
 
 所有高风险能力默认按需开启。Starter 只处理加密、验签、脱敏与审计，不代替 HTTPS、身份认证、RBAC、数据权限和业务授权。
 
-## 构建
+## 快速体验
 
 需要 JDK 8 和 Maven 3.8+：
 
@@ -22,6 +37,63 @@
 mvn clean package
 java -jar demo/target/security-crypto-demo-1.0.0-SNAPSHOT.jar
 ```
+
+启动成功后访问：
+
+```text
+GET http://localhost:8080/demo/users/1
+GET http://localhost:8080/demo/patients/1/masked
+GET http://localhost:8080/demo/patients/1/plain
+```
+
+PowerShell 示例：
+
+```powershell
+Invoke-RestMethod http://localhost:8080/demo/users/1
+Invoke-RestMethod http://localhost:8080/demo/patients/1/masked
+Invoke-RestMethod http://localhost:8080/demo/patients/1/plain
+```
+
+重点观察：
+
+- `users/1` 中手机号和身份证号自动脱敏。
+- `patients/1/masked` 返回脱敏 DTO。
+- `patients/1/plain` 返回明文 DTO，仅用于演示，真实项目必须增加权限控制。
+- 控制台中的 `SECURITY_AUDIT` 日志记录请求方法、URI、状态码和耗时。
+
+`/demo/secure/login` 需要客户端先生成 AES-GCM 密文；`/demo/signed/order` 只有开启 `api-sign.enabled` 并按签名协议生成请求头后才能正常调用。具体调试方式见学习指南。
+
+## 业务项目引入
+
+当前版本为本地 `SNAPSHOT` 工程。先安装到本地 Maven 仓库：
+
+```bash
+mvn clean install
+```
+
+业务项目增加依赖：
+
+```xml
+<dependency>
+    <groupId>com.example.security</groupId>
+    <artifactId>security-crypto-starter</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+</dependency>
+```
+
+然后根据需要开启功能并在业务类上使用对应注解。默认实现都可以通过声明同类型 Spring Bean 进行替换，例如 `KeyProvider`、`Masker`、`ReplayStore` 和 `AuditPublisher`。
+
+MyBatis 字段加密模块是可选依赖。需要使用 `@EncryptField` 时，业务项目还要引入：
+
+```xml
+<dependency>
+    <groupId>com.example.security</groupId>
+    <artifactId>security-crypto-mybatis</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+</dependency>
+```
+
+同时需要业务项目自身已经集成 MyBatis。生产环境使用 Redis 防重放时，还要引入 `spring-boot-starter-data-redis` 并提供可用的 `StringRedisTemplate`。
 
 ## 开发环境配置
 
@@ -54,6 +126,8 @@ security:
     field-encrypt:
       enabled: true
 ```
+
+以上配置是为了同时演示全部能力。实际项目应只开启确实需要的功能，避免无意义地缓存所有请求体或扩大安全组件的影响范围。
 
 ## 生产环境接入
 
@@ -143,3 +217,11 @@ public class PatientEntity {
 ## 上线前检查
 
 上线仍需完成外部 KMS/Vault/HSM、Redis 高可用、密钥轮换与吊销、指标与告警、日志留存、依赖漏洞扫描、渗透测试、容量压测和灾备演练。本项目提供的是生产集成基线，不等同于经过认证的完整安全产品。
+
+## 测试
+
+```bash
+mvn test
+```
+
+当前测试覆盖密钥版本选择、AES-GCM 加解密、未实现算法拒绝、防重放过期清理、请求正文验签、MyBatis 参数恢复、审计脱敏和生产启动保护。接入具体业务后，还应补充 Controller、数据库、Redis 和外部密钥系统的集成测试。
