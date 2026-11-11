@@ -1,0 +1,43 @@
+security:
+  crypto:
+    enabled: true
+    environment: prod
+    fail-fast: true
+    key-version: V2026_01
+    max-body-size: 1048576
+
+    # Production must provide a KeyProvider bean backed by KMS, Vault, or HSM.
+    # Do not configure key.local here.
+    key:
+      allow-local-in-production: false
+
+    api-crypto:
+      enabled: true
+    api-sign:
+      enabled: true
+      window-seconds: 300
+    replay:
+      enabled: true
+      window-seconds: 300
+      store: redis
+      key-prefix: "security:replay:"
+    audit:
+      enabled: true
+      max-body-length: 4096
+      allow-operator-header: false
+      # Enable only behind a trusted proxy that overwrites X-Forwarded-For.
+      trust-forwarded-headers: false
+      fail-on-publish-error: false
+    field-encrypt:
+      enabled: true
+
+spring:
+  redis:
+    host: ${REDIS_HOST}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD}
+    timeout: 2s
+
+logging:
+  level:
+    SECURITY_AUDIT: INFO
